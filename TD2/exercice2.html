@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>exercice 2 : babylon</title>
+    <style>
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+    <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+    <script>
+        const canvas = document.getElementById("canvas");
+        const moteur = new BABYLON.Engine(canvas, true);
+        const scene = new BABYLON.Scene(moteur);
+        scene.clearColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+        const camera = new BABYLON.ArcRotateCamera("camera", Math.PI / 2, Math.PI / 4, 5, BABYLON.Vector3.Zero(), scene);
+        camera.attachControl(canvas, true);
+        const lumiere = new BABYLON.HemisphericLight("lumière", new BABYLON.Vector3(1, 1, 0), scene);
+        const cube = BABYLON.MeshBuilder.CreateBox("cube", { size: 2 }, scene);
+        const materiau = new BABYLON.StandardMaterial("materiau", scene);
+        materiau.diffuseColor = new BABYLON.Color3(0, 1, 0);
+        cube.material = materiau;
+        scene.onBeforeRenderObservable.add(() => {
+            cube.rotation.y += 0.01;
+            cube.rotation.x += 0.01;
+        });
+        moteur.runRenderLoop(() => {
+            scene.render();
+        });
+        window.addEventListener("resize", () => {
+            moteur.resize();
+        });
+    </script>
+</body>
+</html>
