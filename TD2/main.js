@@ -126,7 +126,6 @@ function selectionnerObjet(x, y) {
     }
   }
 }
-
 window.addEventListener('resize', () => {
   rendu.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;

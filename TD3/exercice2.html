@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Carte</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    #carte {
+      height: 100vh;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div id="carte"></div>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-geometryutil"></script>
+  <script>
+    const coordNice = [43.7102, 7.2620];
+    const coordMarseille = [43.2965, 5.3698];
+    const carte = L.map("carte").setView([43.7, 7.25], 6);
+    const tokenMapbox = 'pk.eyJ1IjoiY3YwNiIsImEiOiJjajg2MmpzYjcwbWdnMzNsc2NzM2l4eW0yIn0.TfDJipR5II7orUZaC848YA';
+    const coucheMap = L.tileLayer(`https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token=${tokenMapbox}`, {
+      attribution: 'Map data © <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, <a href="https://www.mapbox.com/">Mapbox</a>',
+      maxZoom: 18,
+      id: 'mapbox/streets-v11',
+      tileSize: 512,
+      zoomOffset: -1
+    }).addTo(carte);
+
+    const coucheOSM = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap"
+    }).addTo(carte);
+    const coucheStamen = L.tileLayer("https://stamen-tiles.a.ssl.fastly.net/toner/{z}/{x}/{y}.png", {
+      attribution: 'Map tiles by <a href="https://stamen.com/">Stamen Design</a>, <a href="https://openstreetmap.org">OpenStreetMap</a> contributors'
+    });
+
+    L.control.layers({ "OSM": coucheOSM, "Stamen": coucheStamen }).addTo(carte);
+    L.marker(coordNice).addTo(carte).bindPopup("Nice").openPopup();
+    L.circle(coordNice, { radius: 700, color: "red", fillOpacity: 0.3 }).addTo(carte);
+    L.marker(coordMarseille).addTo(carte).bindPopup("Marseille").openPopup();
+    L.circle(coordMarseille, { radius: 700, color: "red", fillOpacity: 0.3 }).addTo(carte);
+
+    const triangleBermudes = [
+      [25.774, -80.19],
+      [18.466, -66.118],
+      [32.321, -64.757]
+    ];
+
+    L.polygon(triangleBermudes, { color: "red" }).addTo(carte).bindPopup("triangle des Bermudes");
+    triangleBermudes.forEach(pt => {
+      L.circle(pt, { radius: 700, color: "black", fillOpacity: 0.3 }).addTo(carte);
+    });
+
+    function tracerRouteOSRM(pt1, pt2) {
+      const urlOSRM = `https://router.project-osrm.org/route/v1/driving/${pt1[1]},${pt1[0]};${pt2[1]},${pt2[0]}?overview=full&geometries=geojson`;
+      fetch(urlOSRM)
+        .then(resp => resp.json())
+        .then(result => {
+          const coordsRoute = result.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+          const ligneRoute = L.polyline(coordsRoute, { color: "olive" }).addTo(carte).bindPopup("Route Nice-Marseille");
+          carte.fitBounds(ligneRoute.getBounds());
+        })
+        .catch(() => console.log("Erreur chargement route OSRM"));
+    }
+    tracerRouteOSRM(coordNice, coordMarseille);
+
+    function chargerGeoJSON(url) {
+      fetch(url)
+        .then(resp => resp.json())
+        .then(data => {
+          L.geoJSON(data, {
+            onEachFeature: (feature, layer) => {
+              if(feature.properties) layer.bindPopup(feature.properties.nom || "Sans nom");
+            }
+          }).addTo(carte);
+        });
+    }
+    const urlGeoJSON = 'https://openapi.nicecotedazur.org/endpoint';
+    chargerGeoJSON(urlGeoJSON);
+
+    function calculerDistance(coord1, coord2) {
+      const rayonTerre = 6371;
+      const rad = deg => deg * Math.PI / 180;
+      const lat1 = rad(coord1[0]);
+      const lat2 = rad(coord2[0]);
+      const deltaLat = rad(coord2[0] - coord1[0]);
+      const deltaLon = rad(coord2[1] - coord1[1]);
+      const a = Math.sin(deltaLat / 2) ** 2 +
+                Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLon / 2) ** 2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return (rayonTerre * c).toFixed(2);
+    }
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(position => {
+        const latUser = position.coords.latitude;
+        const lonUser = position.coords.longitude;
+        const posUser = [latUser, lonUser];
+        carte.setView(posUser, 10);
+        L.marker(posUser).addTo(carte).bindPopup("Votre position actuelle").openPopup();
+        L.circle(posUser, { radius: 700, color: "red", fillOpacity: 0.3 }).addTo(carte);
+        L.polyline([coordMarseille, coordNice], { color: "blue" }).addTo(carte).bindPopup("Nice-Marseille");
+        L.polyline([coordMarseille, posUser], { color: "turquoise" }).addTo(carte);
+        const distanceUserMarseille = calculerDistance(posUser, coordMarseille);
+        L.marker(coordMarseille).addTo(carte)
+          .bindPopup(`Marseille est à : ${distanceUserMarseille} km à vol d'oiseau`)
+          .openPopup();
+      });
+    }
+    const pointTest = {
+      type: "Feature",
+      properties: { nom: "Point test" },
+      geometry: { type: "Point", coordinates: [7.25, 43.7] }
+    };
+    const collectionPoints = {
+      type: "FeatureCollection",
+      features: [pointTest]
+    };
+    L.geoJSON(collectionPoints).addTo(carte);
+  </script>
+</body>
+</html>

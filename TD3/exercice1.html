@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Exercice Géolocalisation</title>
+  <style>
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      margin: 20px;
+      line-height: 1.5;
+    }
+    .bloc {
+      margin-bottom: 15px;
+    }
+    .ligne {
+      margin: 3px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Exercice de géolocalisation</h1>
+  <h2>getCurrentPosition()</h2>
+  <div id="actuel" class="bloc">
+    <div class="ligne">position.</div>
+  </div>
+  <h2>watchPosition()</h2>
+  <div id="suivi" class="bloc">
+    <div class="ligne">position.</div>
+  </div>
+  <script>
+    window.onload = () => {
+      const zoneActuelle = document.getElementById('actuel');
+      const zoneSuivi = document.getElementById('suivi');
+      if (!navigator.geolocation) {
+        zoneActuelle.innerHTML = "<div class='ligne'>Géolocalisation non supportée.</div>";
+        zoneSuivi.innerHTML = "<div class='ligne'>Géolocalisation non supportée.</div>";
+        return;
+      }
+      function recupererAltitude(latitudes, longitudes, callback) {
+        fetch(`https://api.open-elevation.com/api/v1/lookup?locations=${latitudes},${longitudes}`)
+          .then(res => res.json())
+          .then(data => {
+            if(data.results && data.results.length > 0) {
+              callback(data.results[0].elevation);
+            } else {
+              callback(null);
+            }
+          })
+          .catch(() => callback(null));
+      }
+      function formaterDate(temps) {
+        return new Date(temps).toLocaleString();
+      }
+      function afficher(donnees, cible) {
+        const coordonnees = donnees.coords;
+        cible.innerHTML = "";
+        function construireLignes(altitude) {
+          const elements = [
+            `Longitude : ${coordonnees.longitude}`,
+            `Latitude : ${coordonnees.latitude}`,
+            `Altitude : ${altitude !== null ? altitude + ' m' : ''}`,
+            `Précision : ±${coordonnees.accuracy} m`,
+            `Vitesse : ${coordonnees.speed !== null ? coordonnees.speed + ' m/s' : ''}`,
+            `Date : ${formaterDate(donnees.timestamp)}`
+          ];
+          elements.forEach(texte => {
+            const ligne = document.createElement("div");
+            ligne.className = "ligne";
+            ligne.textContent = texte;
+            cible.appendChild(ligne);
+          });
+        }
+        if (coordonnees.altitude !== null) {
+          construireLignes(coordonnees.altitude);
+        } else {
+          recupererAltitude(coordonnees.latitude, coordonnees.longitude, (alt) => {
+            construireLignes(alt);
+          });
+        }
+      }
+      navigator.geolocation.getCurrentPosition(
+        position => afficher(position, zoneActuelle),
+        erreur => zoneActuelle.innerHTML = `<div class="ligne">Erreur : ${erreur.message}</div>`,
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+      navigator.geolocation.watchPosition(
+        position => afficher(position, zoneSuivi),
+        erreur => zoneSuivi.innerHTML = `<div class="ligne">Erreur : ${erreur.message}</div>`,
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    };
+  </script>
+</body>
+</html>
