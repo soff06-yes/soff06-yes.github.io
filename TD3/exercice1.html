@@ -1,94 +1,163 @@
-<!DOCTYPE html>
+<!--
+Concernant la mise en place de l'exercice, j'ai réussi à afficher l'ensemble des drapeaux grâce à l'API RestCountries.
+Lorsque l'on clique sur un drapeau du globe, celui-ci est correctement repéré et le drapeau correspondant au pays s'affiche sur Leaflet.
+Cependant, j'ai rencontré des problèmes pour placer une majorité des pays à leurs emplacements respectifs.
+-->
+<!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <title>Exercice Géolocalisation</title>
-  <style>
-    body {
-      font-family: Arial, Helvetica, sans-serif;
-      margin: 20px;
-      line-height: 1.5;
-    }
-    .bloc {
-      margin-bottom: 15px;
-    }
-    .ligne {
-      margin: 3px 0;
-    }
-  </style>
+<meta charset="utf-8" />
+<title>Globe 3D interactif — Three.js + Leaflet</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+html,body { margin:0; height:100%; overflow:hidden; }
+#wrap { display:flex; width:100vw; height:100vh; }
+#map { width:33%; height:100%; }
+#three { width:67%; height:100%; position:relative; }
+canvas { display:block; }
+.info {
+  position:absolute; top:10px; left:10px;
+  background:rgba(255,255,255,0.9);
+  padding:6px 8px; border-radius:6px;
+  font-family:sans-serif; font-size:13px;
+  z-index:10;
+}
+</style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+  }
+}
+</script>
 </head>
 <body>
-  <h1>Exercice de géolocalisation</h1>
-  <h2>getCurrentPosition()</h2>
-  <div id="actuel" class="bloc">
-    <div class="ligne">position.</div>
+<div id="wrap">
+  <div id="map"></div>
+  <div id="three">
+    
   </div>
-  <h2>watchPosition()</h2>
-  <div id="suivi" class="bloc">
-    <div class="ligne">position.</div>
-  </div>
-  <script>
-    window.onload = () => {
-      const zoneActuelle = document.getElementById('actuel');
-      const zoneSuivi = document.getElementById('suivi');
-      if (!navigator.geolocation) {
-        zoneActuelle.innerHTML = "<div class='ligne'>Géolocalisation non supportée.</div>";
-        zoneSuivi.innerHTML = "<div class='ligne'>Géolocalisation non supportée.</div>";
-        return;
-      }
-      function recupererAltitude(latitudes, longitudes, callback) {
-        fetch(`https://api.open-elevation.com/api/v1/lookup?locations=${latitudes},${longitudes}`)
-          .then(res => res.json())
-          .then(data => {
-            if(data.results && data.results.length > 0) {
-              callback(data.results[0].elevation);
-            } else {
-              callback(null);
-            }
-          })
-          .catch(() => callback(null));
-      }
-      function formaterDate(temps) {
-        return new Date(temps).toLocaleString();
-      }
-      function afficher(donnees, cible) {
-        const coordonnees = donnees.coords;
-        cible.innerHTML = "";
-        function construireLignes(altitude) {
-          const elements = [
-            `Longitude : ${coordonnees.longitude}`,
-            `Latitude : ${coordonnees.latitude}`,
-            `Altitude : ${altitude !== null ? altitude + ' m' : ''}`,
-            `Précision : ±${coordonnees.accuracy} m`,
-            `Vitesse : ${coordonnees.speed !== null ? coordonnees.speed + ' m/s' : ''}`,
-            `Date : ${formaterDate(donnees.timestamp)}`
-          ];
-          elements.forEach(texte => {
-            const ligne = document.createElement("div");
-            ligne.className = "ligne";
-            ligne.textContent = texte;
-            cible.appendChild(ligne);
-          });
-        }
-        if (coordonnees.altitude !== null) {
-          construireLignes(coordonnees.altitude);
-        } else {
-          recupererAltitude(coordonnees.latitude, coordonnees.longitude, (alt) => {
-            construireLignes(alt);
-          });
-        }
-      }
-      navigator.geolocation.getCurrentPosition(
-        position => afficher(position, zoneActuelle),
-        erreur => zoneActuelle.innerHTML = `<div class="ligne">Erreur : ${erreur.message}</div>`,
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-      );
-      navigator.geolocation.watchPosition(
-        position => afficher(position, zoneSuivi),
-        erreur => zoneSuivi.innerHTML = `<div class="ligne">Erreur : ${erreur.message}</div>`,
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-      );
-    };
-  </script>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const RAYON_TERRE = 1;
+const TAILLE_DRAPEAU = 0.08;
+const CHEMIN_TEXTURE = 'babylonimages/terre_planete.jpg';
+const conteneur = document.getElementById('three');
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, conteneur.clientWidth / conteneur.clientHeight, 0.1, 100);
+camera.position.set(0, 0.9, 2.8);
+const rendu = new THREE.WebGLRenderer({ antialias: true });
+rendu.setSize(conteneur.clientWidth, conteneur.clientHeight);
+conteneur.appendChild(rendu.domElement);
+const commandes = new OrbitControls(camera, rendu.domElement);
+commandes.enableDamping = true;
+commandes.enablePan = false;
+commandes.autoRotate = false;
+commandes.minDistance = 1.2;
+commandes.maxDistance = 8;
+scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+const lumiere = new THREE.DirectionalLight(0xffffff, 1);
+lumiere.position.set(5, 3, 5);
+scene.add(lumiere);
+
+const groupeGlobe = new THREE.Group();
+scene.add(groupeGlobe);
+const marqueurs = new THREE.Group();
+scene.add(marqueurs);
+
+const chargeurTexture = new THREE.TextureLoader();
+const globe = new THREE.Mesh(
+  new THREE.SphereGeometry(RAYON_TERRE, 64, 64),
+  new THREE.MeshStandardMaterial({ map: chargeurTexture.load(CHEMIN_TEXTURE) })
+);
+groupeGlobe.add(globe);
+
+function latLonVersVector3(lat, lon, rayon = RAYON_TERRE + 0.03) {
+  const phi = THREE.MathUtils.degToRad(90 - lat);
+  const theta = THREE.MathUtils.degToRad(lon + 180);
+  const x = rayon * Math.sin(phi) * Math.cos(theta);
+  const y = rayon * Math.cos(phi);
+  const z = rayon * Math.sin(phi) * Math.sin(theta);
+  return new THREE.Vector3(x, y, z);
+}
+
+function creerDrapeau(lat, lon, urlDrapeau, nom) {
+  const position = latLonVersVector3(lat, lon);
+  const geometrie = new THREE.PlaneGeometry(TAILLE_DRAPEAU, TAILLE_DRAPEAU * 0.6);
+  const materiau = new THREE.MeshBasicMaterial({
+    map: chargeurTexture.load(urlDrapeau),
+    side: THREE.DoubleSide,
+    transparent: true
+  });
+  const plan = new THREE.Mesh(geometrie, materiau);
+  plan.position.copy(position);
+  plan.lookAt(position.clone().multiplyScalar(2));
+  plan.userData = { lat, lon, nom };
+  marqueurs.add(plan);
+}
+
+const carte = L.map('map').setView([20,0],2);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap' }).addTo(carte);
+
+carte.on('click', (e) => {
+  const {lat, lng} = e.latlng;
+  const vecteurCible = latLonVersVector3(lat, lng).normalize();
+  const axe = new THREE.Vector3().crossVectors(new THREE.Vector3(0,0,1), vecteurCible).normalize();
+  const angle = Math.acos(new THREE.Vector3(0,0,1).dot(vecteurCible));
+  const quaternionCible = new THREE.Quaternion().setFromAxisAngle(axe, angle);
+  groupeGlobe.quaternion.slerp(quaternionCible, 0.1);
+});
+
+const lanceurRayon = new THREE.Raycaster();
+const souris = new THREE.Vector2();
+rendu.domElement.addEventListener('pointerdown', (e) => {
+  const rect = rendu.domElement.getBoundingClientRect();
+  souris.x = ((e.clientX - rect.left)/rect.width)*2 - 1;
+  souris.y = -((e.clientY - rect.top)/rect.height)*2 + 1;
+  lanceurRayon.setFromCamera(souris, camera);
+  const intersections = lanceurRayon.intersectObjects(marqueurs.children);
+  if(intersections.length>0) {
+    const {lat, lon, nom} = intersections[0].object.userData;
+    carte.setView([lat, lon], 4, {animate:true});
+    L.popup().setLatLng([lat, lon]).setContent(nom).openOn(carte);
+  }
+});
+
+async function chargerDrapeaux() {
+  try {
+    const reponse = await fetch('https://restcountries.com/v3.1/all?fields=name,capitalInfo,flags');
+    const pays = await reponse.json();
+    for(const paysInfo of pays) {
+      if(!paysInfo.capitalInfo?.latlng || !paysInfo.flags) continue;
+      const lat = paysInfo.capitalInfo.latlng[0];
+      const lon = paysInfo.capitalInfo.latlng[1];
+      creerDrapeau(lat, lon, paysInfo.flags.png || paysInfo.flags.svg, paysInfo.name.common);
+    }
+  } catch(e) { console.error("Erreur chargement drapeaux", e); }
+}
+chargerDrapeaux();
+
+function animer() {
+  requestAnimationFrame(animer);
+  commandes.update();
+  for (const drapeau of marqueurs.children) {
+    drapeau.lookAt(camera.position);
+  }
+  rendu.render(scene, camera);
+}
+animer();
+
+window.addEventListener('resize', () => {
+  camera.aspect = conteneur.clientWidth / conteneur.clientHeight;
+  camera.updateProjectionMatrix();
+  rendu.setSize(conteneur.clientWidth, conteneur.clientHeight);
+});
+</script>
 </body>
 </html>
