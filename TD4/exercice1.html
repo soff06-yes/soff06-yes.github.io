@@ -1,241 +1,300 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <title>TP4 IA</title>
-  <style>
-    /* Style de base pour occuper toute la fenêtre et éviter les barres de défilement */
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background-color: black;
-    }
-    /* Positionnement du canvas 3D en plein écran */
-    #canvas3D {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      display: block;
-      z-index: 0;
-    }
-    /* Style de la carte 2D Leaflet : position, taille, ombre et transparence */
-    #carte2D {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      width: 500px;
-      height: 350px;
-      border-radius: 10px;
-      z-index: 10;
-      box-shadow: 0 0 10px rgba(0,0,0,0.5);
-      overflow: hidden;
-      background-color: rgba(255,255,255,0.85);
-    }
-    /* Style des attributions de la carte Leaflet */
-    .leaflet-control-attribution {
-      font-size: 10px;
-    }
-    /* Style des marqueurs personnalisés pour les capitales et le point rouge */
-    .point-rouge {
-      width: 10px;
-      height: 10px;
-      background-color: red;
-      border-radius: 50%;
-      border: 1px solid #800;
-    }
-    .point-bleu {
-      width: 8px;
-      height: 8px;
-      background-color: blue;
-      border-radius: 50%;
-      border: 1px solid #003;
-    }
-  </style>
-  <!-- Intégration de la feuille de style Leaflet -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    crossorigin=""
-  />
+    <meta charset="utf-8" />
+    <title>TP4 IA</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: black;
+        }
+
+        #canvas3D {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        #carte2D {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 500px;
+            height: 350px;
+            border-radius: 10px;
+            z-index: 10;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            background: rgba(255, 255, 255, 0.85);
+        }
+
+        .point-rouge {
+            width: 12px;
+            height: 12px;
+            background: red;
+            border-radius: 50%;
+            border: 1px solid #800;
+            position: absolute;
+            z-index: 20;
+        }
+
+        .point-bleu {
+            width: 8px;
+            height: 8px;
+            background: blue;
+            border-radius: 50%;
+            border: 1px solid #003;
+        }
+
+        video#webcam {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            width: 160px;
+            border: 2px solid white;
+            border-radius: 8px;
+            z-index: 20;
+        }
+    </style>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
 </head>
 <body>
-  <!-- Conteneur pour la carte 2D Leaflet -->
-  <div id="carte2D"></div>
-  <!-- Canvas pour la Terre 3D -->
-  <canvas id="canvas3D"></canvas>
+    <div id="carte2D"></div>
+    <canvas id="canvas3D"></canvas>
+    <div id="pointMain" class="point-rouge"></div>
+    <video id="webcam" autoplay muted></video>
 
-  <!-- Intégration des bibliothèques Leaflet et Babylon.js -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <script src="https://cdn.babylonjs.com/babylon.js"></script>
-  <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
-
-  <script>
-    // Constante pour ajuster la longitude et synchroniser la Terre 3D et la carte 2D
-    const DECALAGE_LONGITUDE = -90;
-
-    // Initialisation de la carte Leaflet centrée sur [20, 0] avec un zoom de niveau 2
-    const carte = L.map("carte2D").setView([20, 0], 2);
-
-    // Ajout d'une couche de tuiles OpenStreetMap par défaut
-    const coucheOSM = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "© OpenStreetMap contributors"
-    }).addTo(carte);
-
-    // Définition d'une couche alternative (Stamen) pour le contrôle des couches
-    const coucheStamen = L.tileLayer("https://stamen-tiles.a.ssl.fastly.net/toner/{z}/{x}/{y}.png", {
-      attribution: "© Stamen Design"
-    });
-
-    // Ajout du contrôle pour basculer entre les couches de la carte
-    L.control.layers({ "OSM": coucheOSM, "Stamen": coucheStamen }).addTo(carte);
-
-    // --- Récupération et affichage des capitales ---
-    // Utilisation de l'API REST Countries pour récupérer les données des pays et de leurs capitales
-    fetch("https://restcountries.com/v3.1/all?fields=name,capital,capitalInfo,latlng")
-      .then(res => res.json())
-      .then(data => {
-        data.forEach(pays => {
-          const capitale = pays.capital?.[0];
-          if (!capitale) return; // Ignorer si pas de capitale définie
-          // Utilisation des coordonnées de la capitale ou du pays si disponibles
-          let latlon = pays.capitalInfo?.latlng || pays.latlng;
-          if (!latlon || latlon.length !== 2) return; // Ignorer si les coordonnées sont invalides
-          const [lat, lon] = latlon;
-          // Création d'une icône bleue personnalisée pour les capitales
-          const iconeBleue = L.divIcon({
-            className: "point-bleu",
-            iconSize: [8, 8]
-          });
-          // Ajout d'un marqueur pour chaque capitale avec une popup informative
-          L.marker([lat, lon], { icon: iconeBleue })
-            .addTo(carte)
-            .bindPopup(`<b>${pays.name.common}</b><br>Capitale : ${capitale}`);
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script>
+        const DECALAGE_LONGITUDE = -90;
+        const carte = L.map("carte2D").setView([0, 0], 2);
+        const coucheOSM = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: "© OpenStreetMap contributors"
+        }).addTo(carte);
+        const coucheStamen = L.tileLayer("https://stamen-tiles.a.ssl.fastly.net/toner/{z}/{x}/{y}.png", {
+            attribution: "© Stamen Design"
         });
-      });
+        L.control.layers({ "OSM": coucheOSM, "Stamen": coucheStamen }).addTo(carte);
 
-    // Création d'un marqueur rouge (invisible par défaut) pour indiquer la position cliquée
-    const iconeRouge = L.divIcon({
-      className: "point-rouge",
-      iconSize: [10, 10]
-    });
-    const marqueurRouge = L.marker([0, 0], { icon: iconeRouge }).addTo(carte);
-    marqueurRouge.setOpacity(0);
+        const pointMain = document.getElementById("pointMain");
+        const canvas = document.getElementById("canvas3D");
+        const moteur = new BABYLON.Engine(canvas, true);
+        const scene = new BABYLON.Scene(moteur);
+        const camera = new BABYLON.ArcRotateCamera("cam", 0, Math.PI / 2, 6, BABYLON.Vector3.Zero(), scene);
+        camera.attachControl(canvas, true);
+        camera.lowerRadiusLimit = 2.5;
+        camera.upperRadiusLimit = 10;
+        camera.lowerBetaLimit = null;
+        camera.upperBetaLimit = null;
 
-    // Initialisation du moteur Babylon.js pour le rendu 3D
-    const canvas = document.getElementById("canvas3D");
-    const moteur = new BABYLON.Engine(canvas, true);
+        const lumiere = new BABYLON.HemisphericLight("lumiere", new BABYLON.Vector3(0, 1, 0), scene);
+        lumiere.intensity = 1.1;
 
-    // Fonction pour créer la scène 3D
-    const creerScene = () => {
-      const scene = new BABYLON.Scene(moteur);
+        const terre = BABYLON.MeshBuilder.CreateSphere("terre", { diameter: 2, segments: 64 }, scene);
+        const matTerre = new BABYLON.StandardMaterial("matTerre", scene);
+        matTerre.diffuseTexture = new BABYLON.Texture("terre_planete.jpg", scene);
+        matTerre.diffuseTexture.uScale = -1;
+        matTerre.diffuseTexture.vScale = -1;
+        matTerre.specularColor = new BABYLON.Color3(0, 0, 0);
+        matTerre.emissiveColor = new BABYLON.Color3(0.2, 0.2, 0.2);
+        terre.material = matTerre;
 
-      // Configuration de la caméra : ArcRotateCamera pour une vue orbitale autour de la Terre
-      const camera = new BABYLON.ArcRotateCamera("cam", 0, 0, 6, BABYLON.Vector3.Zero(), scene);
-      camera.attachControl(canvas, true);
-      camera.panningSensibility = 0; // Désactive le déplacement latéral
-      camera.lowerRadiusLimit = 2; // Limite de zoom minimal
-      camera.upperRadiusLimit = 10; // Limite de zoom maximal
-
-      // Ajout d'une lumière hémisphérique pour éclairer la Terre
-      const lumiere = new BABYLON.HemisphericLight("lumiere", new BABYLON.Vector3(0, 1, 0), scene);
-      lumiere.intensity = 1.1;
-
-      // Création de la sphère représentant la Terre
-      const terre = BABYLON.MeshBuilder.CreateSphere("terre", { diameter: 2, segments: 64 }, scene);
-
-      // Application d'une texture à la Terre et configuration du matériau
-      const matTerre = new BABYLON.StandardMaterial("matTerre", scene);
-      matTerre.diffuseTexture = new BABYLON.Texture("terre_planete.jpg", scene);
-      matTerre.diffuseTexture.uScale = -1; // Inversion horizontale de la texture
-      matTerre.diffuseTexture.vScale = -1; // Inversion verticale de la texture
-      matTerre.specularColor = new BABYLON.Color3(0, 0, 0); // Désactive les reflets spéculaires
-      matTerre.emissiveColor = new BABYLON.Color3(0.2, 0.2, 0.2); // Lumière ambiante
-      terre.material = matTerre;
-
-      // Fonction pour convertir les coordonnées géographiques (lat, lon) en vecteur 3D
-      function latLonEnVecteur(lat, lon, rayon = 1) {
-        const phi = (90 - lat) * Math.PI / 180; // Conversion latitude en radians
-        const theta = (lon - 180) * Math.PI / 180; // Conversion longitude en radians
-        const x = rayon * Math.sin(phi) * Math.cos(theta);
-        const y = rayon * Math.cos(phi);
-        const z = rayon * Math.sin(phi) * Math.sin(theta);
-        return new BABYLON.Vector3(x, y, z);
-      }
-
-      // Récupération des drapeaux des pays et affichage en 3D
-      fetch("https://restcountries.com/v3.1/all?fields=name,latlng,flags")
-        .then(res => res.json())
-        .then(data => {
-          data.forEach(pays => {
-            if (!pays.latlng || !pays.flags?.png) return; // Ignorer si pas de coordonnées ou de drapeau
-            const [lat, lon] = pays.latlng;
-            const urlDrapeau = pays.flags.png;
-            const rayon = 1.05; // Rayon légèrement supérieur à celui de la Terre pour éviter les collisions
-
-            // Création d'un plan pour afficher le drapeau
-            const plan = BABYLON.MeshBuilder.CreatePlane(pays.name.common + "Drapeau", { width: 0.08, height: 0.05 }, scene);
-            plan.position = latLonEnVecteur(lat, lon, rayon);
-
-            // Application de la texture du drapeau au plan
-            const matDrapeau = new BABYLON.StandardMaterial(pays.name.common + "Mat", scene);
-            matDrapeau.diffuseTexture = new BABYLON.Texture(urlDrapeau, scene);
-            matDrapeau.specularColor = new BABYLON.Color3(0, 0, 0);
-            plan.material = matDrapeau;
-
-            // Activation du mode "billboard" pour que le drapeau fasse toujours face à la caméra
-            plan.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
-
-            // Ajout d'une action pour centrer la carte 2D et la caméra 3D sur le pays cliqué
-            plan.actionManager = new BABYLON.ActionManager(scene);
-            plan.actionManager.registerAction(
-              new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnPickTrigger, () => {
-                carte.setView([lat, lon], 5); // Centre la carte 2D sur le pays
-                const phi = (90 - lat) * Math.PI / 180;
-                const theta = (lon + 180 + DECALAGE_LONGITUDE) * Math.PI / 180;
-                camera.alpha = theta + Math.PI / 2; // Ajuste l'angle horizontal de la caméra
-                camera.beta = phi; // Ajuste l'angle vertical de la caméra
-              })
+        function latLonEnVecteur(lat, lon, rayon = 1) {
+            const phi = (90 - lat) * Math.PI / 180;
+            const theta = (lon - 180) * Math.PI / 180;
+            return new BABYLON.Vector3(
+                rayon * Math.sin(phi) * Math.cos(theta),
+                rayon * Math.cos(phi),
+                rayon * Math.sin(phi) * Math.sin(theta)
             );
-          });
+        }
+
+        // --- Drapeaux 3D (avec capitale corrigée) ---
+        fetch("https://restcountries.com/v3.1/all?fields=name,latlng,flags,capital")
+            .then(res => res.json())
+            .then(data => {
+                data.forEach(pays => {
+                    if (!pays.latlng || !pays.flags?.png) return;
+                    const [lat, lon] = pays.latlng;
+                    const plan = BABYLON.MeshBuilder.CreatePlane(pays.name.common + "Drapeau", { width: 0.08, height: 0.05 }, scene);
+                    plan.position = latLonEnVecteur(lat, lon, 1.05);
+                    const matDrapeau = new BABYLON.StandardMaterial(pays.name.common + "Mat", scene);
+                    matDrapeau.diffuseTexture = new BABYLON.Texture(pays.flags.png, scene);
+                    matDrapeau.specularColor = new BABYLON.Color3(0, 0, 0);
+                    plan.material = matDrapeau;
+                    plan.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
+                    plan.actionManager = new BABYLON.ActionManager(scene);
+                    plan.actionManager.registerAction(new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnPickTrigger, () => {
+                        carte.setView([lat, lon], 5);
+                        camera.alpha = ((lon + 180 + DECALAGE_LONGITUDE) * Math.PI / 180) + Math.PI / 2;
+                        camera.beta = (90 - lat) * Math.PI / 180;
+                        alert(`Pays : ${pays.name.common}\nCapitale : ${pays.capital?.[0] || 'Inconnue'}`);
+                    }));
+                });
+            });
+
+        // --- Capitales sur carte 2D ---
+        fetch("https://restcountries.com/v3.1/all?fields=name,capital,capitalInfo,latlng")
+            .then(res => res.json())
+            .then(data => {
+                window.capitalesData = [];
+                data.forEach(pays => {
+                    const capitale = pays.capital?.[0];
+                    if (!capitale) return;
+                    let latlon = pays.capitalInfo?.latlng || pays.latlng;
+                    if (!latlon || latlon.length !== 2) return;
+                    const [lat, lon] = latlon;
+                    window.capitalesData.push({ nom: pays.name.common, lat, lon });
+                    const iconeBleue = L.divIcon({ className: "point-bleu", iconSize: [8, 8] });
+                    L.marker([lat, lon], { icon: iconeBleue }).addTo(carte)
+                        .bindPopup(`<b>${pays.name.common}</b><br>Capitale : ${capitale}`);
+                });
+            });
+
+        // --- Affichage du pays survolé ---
+        let afficherSurSphere = true;
+        document.addEventListener("keydown", e => {
+            if (e.key === "m") afficherSurSphere = !afficherSurSphere;
         });
 
-      // Géolocalisation de l'utilisateur et affichage de sa position en 3D
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(pos => {
-          const { latitude: lat, longitude: lon } = pos.coords;
-          // Création d'une petite sphère bleue pour représenter la position de l'utilisateur
-          const point = BABYLON.MeshBuilder.CreateSphere("posUser", { diameter: 0.05 }, scene);
-          point.position = latLonEnVecteur(lat, lon, 1.05);
-          const mat = new BABYLON.StandardMaterial("matPos", scene);
-          mat.diffuseColor = new BABYLON.Color3(0, 0, 1); // Couleur bleue
-          point.material = mat;
+        let dernierPays = null;
+        let dernierUpdate = 0;
+        const TOLERANCE = 0.9935; // ← Ajuste cette valeur : 0.995 = précis, 0.99 = plus tolérant
+        const observerPays = () => {
+            if (!scene.meshes) return;
+            const direction = camera.getDirection(BABYLON.Axis.Z).normalize();
+            const positionCam = camera.position;
+            let meilleurDrapeau = null;
+            let meilleurScore = -Infinity;
+            scene.meshes.forEach(mesh => {
+                if (!mesh.name.endsWith("Drapeau")) return;
+                const dirToFlag = mesh.position.subtract(positionCam);
+                const distance = dirToFlag.length();
+                const dirNorm = dirToFlag.normalize();
+                const cosAngle = BABYLON.Vector3.Dot(direction, dirNorm);
+                if (cosAngle <= 0) return; // Drapeau derrière la caméra
+                // On combine angle + distance pour un score global
+                const score = cosAngle - (distance - 3) * 0.001;
+                if (score > meilleurScore) {
+                    meilleurScore = score;
+                    meilleurDrapeau = mesh;
+                }
+            });
+            const maintenant = performance.now();
+            // Si on regarde un drapeau dans la zone de tolérance
+            if (meilleurDrapeau && meilleurScore > TOLERANCE) {
+                const nomPays = meilleurDrapeau.name.replace("Drapeau", "");
+                if (nomPays !== dernierPays || maintenant - dernierUpdate > 1500) {
+                    dernierPays = nomPays;
+                    dernierUpdate = maintenant;
+                    document.getElementById("infoPays")?.remove();
+                    const label = document.createElement("div");
+                    label.id = "infoPays";
+                    label.style.position = "absolute";
+                    label.style.top = "10px";
+                    label.style.left = "50%";
+                    label.style.transform = "translateX(-50%)";
+                    label.style.padding = "5px 10px";
+                    label.style.color = "white";
+                    label.style.background = "rgba(0,0,0,0.5)";
+                    label.style.borderRadius = "8px";
+                    label.style.transition = "opacity 0.5s ease"; // effet fondu
+                    label.style.opacity = "0";
+                    label.textContent = `Pays : ${nomPays}`;
+                    document.body.appendChild(label);
+                    setTimeout(() => (label.style.opacity = "1"), 10);
+                }
+            } else {
+                if (performance.now() - dernierUpdate > 2000) {
+                    const label = document.getElementById("infoPays");
+                    if (label) {
+                        label.style.opacity = "0";
+                        setTimeout(() => label.remove(), 500);
+                    }
+                    dernierPays = null;
+                }
+            }
+        };
+
+        // --- Interaction carte 2D -> sphère 3D ---
+        let marqueurClique = L.marker([0, 0], {
+            icon: L.divIcon({
+                className: '',
+                html: '📍',
+                iconSize: [22, 22],
+                iconAnchor: [10, 20]
+            })
+        }).addTo(carte);
+        marqueurClique.setOpacity(0); // invisible au début
+        carte.on('click', function(e) {
+            const lat = e.latlng.lat;
+            const lon = e.latlng.lng;
+            // Affiche le marqueur sur la carte
+            marqueurClique.setLatLng([lat, lon]);
+            marqueurClique.setOpacity(1);
+            // Recentrage de la caméra sur la sphère
+            const phi = (90 - lat) * Math.PI / 180;
+            const theta = (lon + 180 + DECALAGE_LONGITUDE) * Math.PI / 180;
+            camera.alpha = theta + Math.PI / 2;
+            camera.beta = phi;
+            // Petit zoom automatique pour être plus proche
+            camera.radius = 3.5;
         });
-      }
 
-      // Synchronisation entre la carte 2D et la Terre 3D : cliquer sur la carte 2D centre la caméra 3D
-      carte.on("click", e => {
-        const lat = e.latlng.lat;
-        const lon = e.latlng.lng;
-        marqueurRouge.setLatLng([lat, lon]);
-        marqueurRouge.setOpacity(1); // Affiche le marqueur rouge
-        const phi = (90 - lat) * Math.PI / 180;
-        const theta = (lon + 180 + DECALAGE_LONGITUDE) * Math.PI / 180;
-        camera.alpha = theta + Math.PI / 2; // Ajuste l'angle horizontal de la caméra
-        camera.beta = phi; // Ajuste l'angle vertical de la caméra
-      });
+        moteur.runRenderLoop(() => {
+            scene.render();
+            observerPays();
+        });
 
-      return scene;
-    };
+        window.addEventListener("resize", () => moteur.resize());
 
-    // Création et exécution de la scène 3D
-    const scene = creerScene();
-    moteur.runRenderLoop(() => scene.render());
-    window.addEventListener("resize", () => moteur.resize()); // Redimensionnement automatique
-  </script>
+        // --- Contrôle gestuel fluide ---
+        const videoElement = document.getElementById("webcam");
+        const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
+        hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+
+        let prevX = 0.5, prevY = 0.5;
+        hands.onResults(results => {
+            if (!results.multiHandLandmarks) return;
+            results.multiHandLandmarks.forEach((landmarks, index) => {
+                const handLabel = results.multiHandedness[index].label;
+                const wrist = landmarks[0];
+                const indexFinger = landmarks[8];
+                pointMain.style.left = (window.innerWidth / 2 - 6) + 'px';
+                pointMain.style.top = (window.innerHeight / 2 - 6) + 'px';
+                const dx = wrist.x - prevX;
+                const dy = wrist.y - prevY;
+                camera.alpha += dx * 12;
+                camera.beta -= dy * 12;
+                prevX = wrist.x;
+                prevY = wrist.y;
+                if (handLabel === "Right") camera.radius -= 0.1;
+                if (handLabel === "Left") camera.radius += 0.1;
+            });
+        });
+
+        const cameraFeed = new Camera(videoElement, {
+            onFrame: async () => { await hands.send({ image: videoElement }) },
+            width: 320,
+            height: 240
+        });
+        cameraFeed.start();
+    </script>
 </body>
 </html>
